@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { ScanFace, KeyRound, User as UserIcon, Trash2, Check } from "lucide-react";
 import { vault } from "@/lib/vault";
 import { WebcamCapture } from "@/components/WebcamCapture";
+import { computeFaceHash } from "@/lib/face";
 
 export const Route = createFileRoute("/app/settings")({
   component: SettingsPage,
@@ -13,7 +14,6 @@ function SettingsPage() {
   const nav = useNavigate();
   const [user, setUser] = useState(() => vault.getUser());
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
   const [saved, setSaved] = useState("");
   const [recapture, setRecapture] = useState(false);
@@ -21,7 +21,7 @@ function SettingsPage() {
   useEffect(() => {
     const u = vault.getUser();
     setUser(u);
-    if (u) { setName(u.name); setEmail(u.email); }
+    if (u) { setName(u.name); }
   }, []);
 
   if (!user) return null;
@@ -29,9 +29,9 @@ function SettingsPage() {
   const flash = (s: string) => { setSaved(s); setTimeout(() => setSaved(""), 1800); };
 
   const saveProfile = () => {
-    vault.setUser({ ...user, name, email });
+    vault.setUser({ ...user, name });
     vault.log("Updated profile");
-    setUser({ ...user, name, email });
+    setUser({ ...user, name });
     flash("Profile updated");
   };
 
@@ -44,13 +44,15 @@ function SettingsPage() {
     flash("PIN updated");
   };
 
-  const onRecaptured = (img: string) => {
-    vault.setUser({ ...user, faceImage: img });
+  const onRecaptured = async (img: string) => {
+    const faceHash = await computeFaceHash(img);
+    vault.setUser({ ...user, faceImage: img, faceHash });
     vault.log("Recaptured face");
-    setUser({ ...user, faceImage: img });
+    setUser({ ...user, faceImage: img, faceHash });
     setRecapture(false);
     flash("Face updated");
   };
+
 
   const wipe = () => {
     if (!confirm("This permanently clears your vault on this device. Continue?")) return;
@@ -76,7 +78,6 @@ function SettingsPage() {
         {/* Profile */}
         <Section icon={UserIcon} title="Profile">
           <Field label="Full name" value={name} onChange={setName} />
-          <Field label="Email" value={email} onChange={setEmail} type="email" />
           <button onClick={saveProfile} className="mt-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">Save changes</button>
         </Section>
 

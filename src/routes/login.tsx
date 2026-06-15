@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanFace, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ScanFace, ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
 import { WebcamCapture } from "@/components/WebcamCapture";
 import { PinPad } from "@/components/PinPad";
 import { vault } from "@/lib/vault";
+import { computeFaceHash, similarityScore, MATCH_THRESHOLD } from "@/lib/face";
 import { DemoNotice } from "@/components/DemoNotice";
 
 export const Route = createFileRoute("/login")({
@@ -12,12 +13,14 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-type Stage = "face" | "verified" | "pin" | "unlocking" | "error";
+type Stage = "face" | "verified" | "face-failed" | "pin" | "unlocking";
 
 function LoginPage() {
   const nav = useNavigate();
   const [stage, setStage] = useState<Stage>("face");
   const [error, setError] = useState(false);
+  const [matchScore, setMatchScore] = useState(0);
+  const [faceAttempts, setFaceAttempts] = useState(0);
   const [user, setUser] = useState<ReturnType<typeof vault.getUser>>(null);
 
   useEffect(() => { setUser(vault.getUser()); }, []);
@@ -34,10 +37,21 @@ function LoginPage() {
     );
   }
 
-  const onFaceCaptured = () => {
-    // Simulate face match
-    setStage("verified");
-    setTimeout(() => setStage("pin"), 1300);
+  const onFaceCaptured = async (img: string) => {
+    const u = vault.getUser();
+    if (!u) return;
+    const hash = await computeFaceHash(img);
+    const score = similarityScore(hash, u.faceHash || "");
+    setMatchScore(score);
+    if (score >= MATCH_THRESHOLD) {
+      vault.log(`Face matched (${(score * 100).toFixed(1)}%)`);
+      setStage("verified");
+      setTimeout(() => setStage("pin"), 1300);
+    } else {
+      vault.log(`Face mismatch (${(score * 100).toFixed(1)}%)`);
+      setFaceAttempts((n) => n + 1);
+      setStage("face-failed");
+    }
   };
 
   const onPin = (entered: string) => {
@@ -75,7 +89,9 @@ function LoginPage() {
             {stage === "face" && (
               <motion.div key="face" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <h1 className="text-center font-display text-2xl font-bold">Verify your face</h1>
-                <p className="mt-1 text-center text-sm text-muted-foreground">Look at the camera and press scan.</p>
+                <p className="mt-1 text-center text-sm text-muted-foreground">
+                  Welcome back{user?.name ? `, ${user.name.split(" ")[0]}` : ""}. Look at the camera and press scan.
+                </p>
                 <div className="mt-6">
                   <WebcamCapture onCapture={onFaceCaptured} label="Scan Face" />
                 </div>
@@ -88,7 +104,36 @@ function LoginPage() {
                   <CheckCircle2 className="h-10 w-10 text-success" />
                 </motion.div>
                 <h2 className="mt-5 font-display text-2xl font-bold">Identity Verified</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Face match score: 98.7%</p>
+                <p className="mt-1 text-sm text-muted-foreground">Face match score: {(matchScore * 100).toFixed(1)}%</p>
+              </motion.div>
+            )}
+
+            {stage === "face-failed" && (
+              <motion.div key="fail" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="py-10 text-center">
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring" }} className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-destructive/20 ring-2 ring-destructive">
+                  <XCircle className="h-10 w-10 text-destructive" />
+                </motion.div>
+                <h2 className="mt-5 font-display text-2xl font-bold">Face not recognized</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Match score: {(matchScore * 100).toFixed(1)}% — below the {(MATCH_THRESHOLD * 100).toFixed(0)}% threshold.
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Try better lighting and keep your face centered.</p>
+                <div className="mt-6 flex justify-center gap-3">
+                  <button
+                    onClick={() => setStage("face")}
+                    className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground"
+                  >
+                    Try again
+                  </button>
+                  {faceAttempts >= 2 && (
+                    <button
+                      onClick={() => setStage("pin")}
+                      className="rounded-xl glass px-5 py-2.5 text-sm font-semibold hover:bg-white/10"
+                    >
+                      Use PIN instead
+                    </button>
+                  )}
+                </div>
               </motion.div>
             )}
 
@@ -110,3 +155,4 @@ function LoginPage() {
     </div>
   );
 }
+

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ScanFace, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
 import { WebcamCapture } from "@/components/WebcamCapture";
 import { vault } from "@/lib/vault";
+import { computeFaceHash } from "@/lib/face";
 import { DemoNotice } from "@/components/DemoNotice";
 
 export const Route = createFileRoute("/signup")({
@@ -15,15 +16,15 @@ function SignupPage() {
   const nav = useNavigate();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
   const [face, setFace] = useState<string | null>(null);
 
   const next = () => setStep((s) => s + 1);
 
-  const finish = (img: string) => {
+  const finish = async (img: string) => {
     setFace(img);
-    vault.setUser({ name, email, pin, faceImage: img, createdAt: Date.now() });
+    const faceHash = await computeFaceHash(img);
+    vault.setUser({ name, pin, faceImage: img, faceHash, createdAt: Date.now() });
     vault.log("Account created");
     vault.signIn();
     vault.log("Signed in");
@@ -56,14 +57,13 @@ function SignupPage() {
           <AnimatePresence mode="wait">
             {step === 0 && (
               <motion.div key="0" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
-                <h1 className="font-display text-2xl font-bold">Tell us about you</h1>
-                <p className="mt-1 text-sm text-muted-foreground">Your account stays on this device.</p>
+                <h1 className="font-display text-2xl font-bold">What should we call you?</h1>
+                <p className="mt-1 text-sm text-muted-foreground">No email required — your vault lives only on this device.</p>
                 <div className="mt-6 space-y-4">
                   <Field label="Full name" value={name} onChange={setName} placeholder="Jane Doe" />
-                  <Field label="Email" value={email} onChange={setEmail} placeholder="jane@example.com" type="email" />
                 </div>
                 <button
-                  disabled={!name || !email}
+                  disabled={!name.trim()}
                   onClick={next}
                   className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition hover:shadow-primary/50 disabled:opacity-50"
                 >
@@ -71,6 +71,8 @@ function SignupPage() {
                 </button>
               </motion.div>
             )}
+
+
 
             {step === 1 && (
               <motion.div key="1" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>

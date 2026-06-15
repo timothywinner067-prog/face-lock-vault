@@ -75,7 +75,7 @@ export function AppShell() {
               <img src={user.faceImage} alt="" className="h-9 w-9 rounded-full object-cover ring-2 ring-cyan" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold">{user.name}</div>
-                <div className="truncate text-xs text-muted-foreground">{user.email}</div>
+                <div className="truncate text-xs text-muted-foreground">Vault unlocked</div>
               </div>
               <button onClick={logout} title="Sign out" className="rounded-lg p-2 text-muted-foreground hover:bg-white/10 hover:text-foreground">
                 <LogOut className="h-4 w-4" />
