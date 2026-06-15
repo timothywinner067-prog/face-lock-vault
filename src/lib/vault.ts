@@ -3,9 +3,9 @@
 
 export type User = {
   name: string;
-  email: string;
   pin: string;
-  faceImage: string; // dataURL
+  faceImage: string; // dataURL (reference shot)
+  faceHash: string;  // perceptual hash of the reference face
   createdAt: number;
 };
 
