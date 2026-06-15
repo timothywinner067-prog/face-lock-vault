@@ -8,13 +8,13 @@ import {
 import { vault } from "@/lib/vault";
 import { DemoNotice } from "@/components/DemoNotice";
 
-const navItems = [
+const navItems: { to: string; label: string; icon: any; exact?: boolean }[] = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/app/vault", label: "Vault", icon: Lock },
   { to: "/app/documents", label: "Documents", icon: FileText },
   { to: "/app/security", label: "Security", icon: ShieldCheck },
   { to: "/app/settings", label: "Settings", icon: Settings },
-] as const;
+];
 
 export function AppShell() {
   const nav = useNavigate();
