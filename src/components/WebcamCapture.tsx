@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Camera, ScanFace, Loader2 } from "lucide-react";
 
@@ -10,36 +10,55 @@ type Props = {
 
 export function WebcamCapture({ onCapture, label = "Capture Face", autoStart = true }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
+  const [needsGesture, setNeedsGesture] = useState(false);
+
+  const attachStream = useCallback(async (s: MediaStream) => {
+    streamRef.current = s;
+    const v = videoRef.current;
+    if (!v) return;
+    v.srcObject = s;
+    try {
+      await v.play();
+    } catch {
+      // autoplay blocked — surface a button so the user can start it via gesture
+      setNeedsGesture(true);
+    }
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    setError(null);
+    setNeedsGesture(false);
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera API not available in this browser.");
+      }
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+        audio: false,
+      });
+      await attachStream(s);
+    } catch (e: any) {
+      const msg =
+        e?.name === "NotAllowedError"
+          ? "Camera permission denied. Allow it in your browser to continue."
+          : e?.name === "NotFoundError"
+          ? "No camera found on this device."
+          : e?.message ?? "Camera unavailable.";
+      setError(msg);
+    }
+  }, [attachStream]);
 
   useEffect(() => {
-    if (!autoStart) return;
-    let active = true;
-    (async () => {
-      try {
-        const s = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } });
-        if (!active) {
-          s.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        setStream(s);
-        if (videoRef.current) {
-          videoRef.current.srcObject = s;
-          await videoRef.current.play().catch(() => {});
-        }
-      } catch (e: any) {
-        setError(e?.message ?? "Camera unavailable. You can still continue in demo mode.");
-      }
-    })();
+    if (autoStart) startCamera();
     return () => {
-      active = false;
-      setStream((s) => {
-        s?.getTracks().forEach((t) => t.stop());
-        return null;
-      });
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart]);
 
   const snap = () => {
@@ -56,8 +75,11 @@ export function WebcamCapture({ onCapture, label = "Capture Face", autoStart = t
       ctx.drawImage(v, 0, 0, c.width, c.height);
       dataUrl = c.toDataURL("image/jpeg", 0.7);
     } else {
-      // fallback demo placeholder
-      dataUrl = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect fill="#1e293b" width="320" height="240"/><text fill="#60a5fa" x="50%" y="50%" text-anchor="middle" font-family="sans-serif">Demo Face</text></svg>');
+      dataUrl =
+        "data:image/svg+xml;base64," +
+        btoa(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect fill="#1e293b" width="320" height="240"/><text fill="#60a5fa" x="50%" y="50%" text-anchor="middle" font-family="sans-serif">Demo Face</text></svg>',
+        );
     }
     setTimeout(() => {
       setCapturing(false);
@@ -68,12 +90,27 @@ export function WebcamCapture({ onCapture, label = "Capture Face", autoStart = t
   return (
     <div className="relative mx-auto w-full max-w-sm">
       <div className="relative aspect-[4/3] overflow-hidden rounded-3xl glass ring-glow">
-        <video ref={videoRef} muted playsInline className="h-full w-full -scale-x-100 object-cover" />
-        {!stream && (
-          <div className="absolute inset-0 grid place-items-center text-muted-foreground">
-            <div className="flex flex-col items-center gap-2">
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          autoPlay
+          onLoadedMetadata={() => setReady(true)}
+          className="h-full w-full -scale-x-100 object-cover"
+        />
+        {!ready && (
+          <div className="absolute inset-0 grid place-items-center bg-background/40 text-muted-foreground">
+            <div className="flex flex-col items-center gap-2 px-6 text-center">
               <Camera className="h-8 w-8" />
-              <p className="text-xs">{error ?? "Starting camera…"}</p>
+              <p className="text-xs">{error ?? (needsGesture ? "Tap to start camera" : "Starting camera…")}</p>
+              {(error || needsGesture) && (
+                <button
+                  onClick={startCamera}
+                  className="mt-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
+                >
+                  {error ? "Retry" : "Enable camera"}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -89,6 +126,7 @@ export function WebcamCapture({ onCapture, label = "Capture Face", autoStart = t
               transition={{ duration: 1.6, ease: "easeInOut" }}
             />
           )}
+
           {/* Corners */}
           {["top-4 left-4", "top-4 right-4 rotate-90", "bottom-4 left-4 -rotate-90", "bottom-4 right-4 rotate-180"].map((p) => (
             <div key={p} className={`absolute h-5 w-5 ${p}`}>
